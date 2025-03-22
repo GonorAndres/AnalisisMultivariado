@@ -1,0 +1,284 @@
+---
+title: "Tarea 2"
+author: "Luis Hernandez,Estefan Reyes,Andrés Ortega"
+date: "2025-03-21"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(moments)
+library(corrplot)
+library(GGally)
+library(ggplot2)
+library(andrews)
+library(QuantPsyc)
+library(ICSNP) 
+library(car)
+library(Hotelling)
+```
+
+## Ejercicio 8
+
+Considera una urna con bolas de $K$ diferente colores, donde al tiempo 0, hay $\alpha_i$ bolas del i-ésimo color. Al timepo n, se saca una bola y se regresa a la urna junto con una nueva bola de ese color y se repite el proceso N veces. Si $N\rightarrow  \infty$, se puede domstra que las proporciones de bolas en la urna seguirán una distribución Dirichlet.
+
+  i) Considerando $K=3$, $\alpha = c(2,5,1) y N "suficientement grande", implementa este algoritmo y obtén una muestra de tamaño n.
+
+```{r Algoritmo de urna a Dirichlet}
+
+prob <- function(al){
+  
+  p_alpha <- numeric(length(al))
+  for (i in 1:length(al)){
+    p_alpha[i] <- al[i]/sum(al)
+  }
+  return(p_alpha)
+}
+
+
+urna <- function(al,N){
+  prob <- prob(al)
+  M <- matrix(0, nrow = 1 , ncol = length(al))
+  
+  for (i in 1:N){
+    ext <- sample(1:length(al),size =1, prob = prob)
+    al[ext] <- al[ext] + 1
+    prob <- prob(al)
+    
+    M <- rbind(M, prob)
+    
+  }
+  return(M[-1,])
+}
+N <- 100
+alpha <- c(2, 5, 1)
+
+matriz_dirichlet1 <- urna(alpha, N)
+print(tail(matriz_dirichlet1,10))
+```
+Para este algoritmo resulta demasiado variable el resultado pues algunas tiradas no se parece a la distribución dirichlet en cuanto a sus esperanza, pero en la mayoría de los casos si lo hace; será necesario tomar muestras mucho más grandes.
+
+
+  ii. Diseña e implementa un algoritmo para genera vectores aleatorios Dirichlet a partir de la transformación de variables aleatorios Dirichlet a partir de la transformación de variables aletorias gamma. Obtén una muestra de tamaño n.
+
+```{r Algoritmo de la Gamma}
+# Función para generar vectores Dirichlet a partir de variables Gamma
+vector_dirichlet <- function(alpha, n) {
+  # Número de parámetros
+  k <- length(alpha)
+  
+  # Inicializar matriz para almacenar las muestras
+  gammas <- matrix(0, nrow = n, ncol = k)
+  
+  # Generar variables aleatorias Gamma para cada parámetro alpha
+  for (i in 1:k) {
+    gammas[, i] <- rgamma(n, shape = alpha[i], rate = 1)
+  }
+  
+  # Normalizar las muestras Gamma para obtener muestras Dirichlet
+  s_dirichlet <- gammas / rowSums(gammas)
+  
+  return(s_dirichlet)
+}
+
+alpha <- c(2,5, 1)
+n <- 100
+matriz_dirichlet2 <- vector_dirichlet(alpha, n)
+print(tail(matriz_dirichlet2,10))
+
+```
+
+  iii. Para diferentes valores de N y n compara la media, el segundo momento y la covarianza muestral contra los resultados teóricos obtenidos en el ejercicio 7. ¿Cuál algoritmo es más eficiente?
+  
+```{r Comparaciones 1}
+
+alpha <- c(2,5, 1)
+n <- 1000
+N <- 1000
+matriz_dirichlet1 <- urna(alpha, N)
+matriz_dirichlet2 <- vector_dirichlet(alpha, n)
+
+#mediaa
+
+media_urna <- colMeans(matriz_dirichlet1)
+media_gammas <- colMeans(matriz_dirichlet2)
+
+media_pob <- function(al){
+  m_pob <- rep(0, length(al))
+  
+  for (i in 1:length(al)){
+    m_pob[i] <- al[i]/sum(al)
+  }
+  
+  return(m_pob)
+}
+
+media_poblacion <- media_pob(alpha)
+
+medias <- data.frame(media_urna, media_gammas, media_poblacion)
+
+#Segundo momento
+var_urna <- apply(matriz_dirichlet1, 2, var)
+var_gammas <- apply(matriz_dirichlet2, 2, var)
+
+var_pob <- function(al){
+  v_pob <- rep(0,length(al))
+  
+  for (i in 1:length(al)){
+    v_pob[i] <- media_poblacion[i]*(1-media_poblacion[i])/(1+sum(al))
+  }
+  return(v_pob)
+}
+
+var_poblacion <- var_pob(alpha)
+
+varianzas <- data.frame(var_urna, var_gammas, var_poblacion)
+
+
+#Covarianzas
+cov_urna <- cov(matriz_dirichlet1)
+
+cov_gammas <- cov(matriz_dirichlet2) 
+
+cov_pob <- function(al){
+  M_cov_pob <- matrix(0, nrow = length(al), ncol = length(al))
+  
+  for (i in 1:length(al)){
+    for(j in 1:length(al)){
+      
+      if (i == j){
+        M_cov_pob [i,j] <- var_poblacion[j]
+      }
+      else{
+        M_cov_pob[i,j] <- -(al[i]*al[j])/((sum(al)^2)*(sum(al)+1))
+      }
+      
+      
+    }
+  }
+  return(M_cov_pob)
+}
+
+cov_poblacion <- cov_pob(alpha)
+
+covs <- data.frame(cov_urna, cov_gammas, cov_poblacion)
+
+print(medias)
+
+print(varianzas)
+
+print(covs)
+```
+  
+Vemos que para las distribución basada en la gamma la muetra de 1000 es suficientemente precisa con las estadisticas poblacionales pero la distribución basada en las urnas se queda muy corta en cuanto al segundo momento y las covarianzas como ya observamos cuando creamos la función necesitaremos muestras más grandes.
+
+```{r Comparaciones 2}
+
+alpha <- c(2,5, 1)
+n <- 1000
+N <- 30000
+matriz_dirichlet1 <- urna(alpha, N)
+matriz_dirichlet2 <- vector_dirichlet(alpha, n)
+
+#mediaa
+
+media_urna <- colMeans(matriz_dirichlet1)
+media_gammas <- colMeans(matriz_dirichlet2)
+media_poblacion <- media_pob(alpha)
+
+medias <- data.frame(media_urna, media_gammas, media_poblacion)
+
+#Segundo momento
+var_urna <- apply(matriz_dirichlet1, 2, var)
+var_gammas <- apply(matriz_dirichlet2, 2, var)
+var_poblacion <- var_pob(alpha)
+
+varianzas <- data.frame(var_urna, var_gammas, var_poblacion)
+
+
+#Covarianzas
+cov_urna <- cov(matriz_dirichlet1)
+cov_gammas <- cov(matriz_dirichlet2)
+cov_poblacion <- cov_pob(alpha)
+
+covs <- data.frame(cov_urna, cov_gammas, cov_poblacion)
+
+print(medias)
+
+print(varianzas)
+
+print(covs)
+```
+
+Vemos que al hacer crecer la N se aproxima a la media poblacional pero el tiempo de ejecución se dispara enormemente y aún las estadisticas del segundo momento y las covarianzas quedan muy alejadas de las estadisticas poblacionales, es mejor el algoritmo que hace uso de la función gamma, el primero es demasiado costoso computacionalmente.
+
+## Ejercicio 9
+
+Considera la base de datos $cork.txt$ que contiene los pesos de corcho tomado de las 4 direcciones cardinales de 28 árboles. ¿Se puede asumir que los datos siguen una distribución normal multivariada?
+
+```{r Ejercicio 9}
+# convertimos el archivo a datos en R para empezar el análisis
+datos9 <- read.csv("C:/Users/andre/OneDrive/Documentos/Actuaria/Semestre_2025_2/AnálisisMultivariado/Tareas/Tarea1/cork.txt", header = TRUE, sep = " ")
+
+# Realizar la prueba de Mardia
+resultado_mardia <- mult.norm(datos9)$mult.test
+
+print(resultado_mardia)
+```
+
+La prueba de Mardia arroja unos p-valores superiores a nuestro nivel de significancia estandár, por lo tanto no hay suficiente evidencia para concluir que los datos no siguen una distribución normal multivariada, es decir tomamos los datos como datos distribuidos con una normal multivariada.
+
+## Ejercicio 10
+
+Para la base de datos $wine.txt$ asumir que las variables alcohol y malic acid siguen un distribución normal multivarida.
+
+i. Probar la hipótesis nula de que el vino promedio difiera de 13.15 grados de alcohol y 2.5 unidades de ácido málico.
+
+```{r}
+datos10 <- read.csv("C:/Users/andre/OneDrive/Documentos/Actuaria/Semestre_2025_2/AnálisisMultivariado/Tareas/Tarea1/wine.txt", header = TRUE, sep = ",")
+
+#Dejamos solo las columnas con las que vamos a trabajar
+datos10 <- datos10[,2:3]
+
+# Sigma desconocida
+mu_bar=apply(datos10,2,mean)
+sigma_hat=cov(datos10);sigma_hat
+
+# Statistic
+((176*178)/(2*177))*t(mu_bar-c(13.15, 2.5))%*%solve(sigma_hat)%*%(mu_bar-c(13.15, 2.5))
+
+# ICSNP 
+HotellingsT2(datos10,mu=c(13.15,2.5))
+
+# Critical value at alpha=.05
+qf(.95,2,176)
+```
+Vemos que nuestro valor de la estadistica esta por encima de nuestro valor critico, y de la misma manera el p-valor es menor al nivel de significancia estandár por lo tanto rechazamos la hipotesis nula de las medias en el vector c(13.15, 2.5).
+
+
+ii. Realizar los contrastes de hipótesis necesarios para verificar si existe o no una diferencia para los niveles de alcohol y ácido málico para las clases 1 y 2 de vinos.
+
+```{r}
+datos10 <- read.csv("C:/Users/andre/OneDrive/Documentos/Actuaria/Semestre_2025_2/AnálisisMultivariado/Tareas/Tarea1/wine.txt", header = TRUE, sep = ",")
+
+#Dejamos solo las columnas con las que vamos a trabajar
+datos10 <- datos10[,1:3]
+
+datos10_1 <- datos10[datos10$Class == 1,]  
+datos10_2 <- datos10[datos10$Class == 2,]
+
+datos10_1 <- datos10_1[,2:3]
+datos10_2 <- datos10_2[,2:3]
+
+# Combinar los datos en una lista
+datos <- list(datos10_1, datos10_2)
+
+# Realizar la prueba de Hotelling T^2
+resultado <- hotelling.test(datos[[1]], datos[[2]])
+
+# Mostrar los resultados
+print(resultado)
+```
+
+Tenemos que el p-valor para la prueba de hotelling es practicamente nulo, por lo tanto la hipotesis nula que dice que las medias son iguales para ambos grupos no se cumple y por tanto las medias para ambos grupos son diferentes.
+
